@@ -5,7 +5,7 @@ class OicSession < ActiveRecord::Base
   before_create :randomize_nonce!
 
   def self.client_config
-    Setting.plugin_redmine_openid_connect
+    Setting['plugin_redmine_openid_connect']
   end
 
   def client_config
@@ -21,7 +21,7 @@ class OicSession < ActiveRecord::Base
   end
 
   def self.enabled?
-    client_config['enabled']
+    Setting['plugin_redmine_openid_connect']['enabled']
   end
 
   def self.disabled?
@@ -29,14 +29,14 @@ class OicSession < ActiveRecord::Base
   end
 
   def self.openid_configuration_url
-    client_config['openid_connect_server_url'] + '/.well-known/openid-configuration'
+    Setting['plugin_redmine_openid_connect']['openid_connect_server_url'] + '/.well-known/openid-configuration'
   end
 
   def self.get_dynamic_config
-    hash = Digest::SHA1.hexdigest client_config.to_json
-    expiry = client_config['dynamic_config_expiry'] || 86400
+    hash = Digest::SHA1.hexdigest Setting['plugin_redmine_openid_connect'].to_json
+    expiry = Setting['plugin_redmine_openid_connect']['dynamic_config_expiry'] || 86400
     Rails.cache.fetch("oic_session_dynamic_#{hash}", expires_in: expiry) do
-      HTTParty::Basement.default_options.update(verify: false) if client_config['disable_ssl_validation']
+      HTTParty::Basement.default_options.update(verify: false) if Setting['plugin_redmine_openid_connect']['disable_ssl_validation']
       ActiveSupport::HashWithIndifferentAccess.new HTTParty.get(openid_configuration_url)
     end
   end
@@ -52,11 +52,11 @@ class OicSession < ActiveRecord::Base
   def self.get_token(query)
     uri = dynamic_config['token_endpoint']
 
-    HTTParty::Basement.default_options.update(verify: false) if client_config['disable_ssl_validation']
+    HTTParty::Basement.default_options.update(verify: false) if Setting['plugin_redmine_openid_connect']['disable_ssl_validation']
     response = HTTParty.post(
       uri,
       body: query,
-      basic_auth: {username: client_config['client_id'], password: client_config['client_secret'] }
+      basic_auth: {username: Setting['plugin_redmine_openid_connect']['client_id'], password: Setting['plugin_redmine_openid_connect']['client_secret'] }
     )
   end
 
@@ -99,7 +99,7 @@ class OicSession < ActiveRecord::Base
   def get_user_info!
     uri = dynamic_config['userinfo_endpoint']
 
-    HTTParty::Basement.default_options.update(verify: false) if client_config['disable_ssl_validation']
+    HTTParty::Basement.default_options.update(verify: false) if Setting['plugin_redmine_openid_connect']['disable_ssl_validation']
     response = HTTParty.get(
       uri,
       headers: { "Authorization" => "Bearer #{access_token}" }
@@ -116,7 +116,7 @@ class OicSession < ActiveRecord::Base
   end
 
   def authorized?
-    if client_config['group'].blank?
+    if Setting['plugin_redmine_openid_connect']['group'].blank?
       return true
     end
 
@@ -124,8 +124,8 @@ class OicSession < ActiveRecord::Base
 
     return true if self.admin?
 
-    if client_config['group'].present? &&
-       user["member_of"].include?(client_config['group'])
+    if Setting['plugin_redmine_openid_connect']['group'].present? &&
+       user["member_of"].include?(Setting['plugin_redmine_openid_connect']['group'])
       return true
     end
 
@@ -133,8 +133,8 @@ class OicSession < ActiveRecord::Base
   end
 
   def admin?
-    if client_config['admin_group'].present? &&
-       user["member_of"].include?(client_config['admin_group'])
+    if Setting['plugin_redmine_openid_connect']['admin_group'].present? &&
+       user["member_of"].include?(Setting['plugin_redmine_openid_connect']['admin_group'])
       return true
     end
 
@@ -174,7 +174,7 @@ class OicSession < ActiveRecord::Base
       "nonce" => self.nonce,
       "scope" => scopes,
       "redirect_uri" => "#{host_name}/oic/local_login",
-      "client_id" => client_config['client_id'],
+      "client_id" => Setting['plugin_redmine_openid_connect']['client_id'],
     }
   end
 
@@ -217,10 +217,10 @@ class OicSession < ActiveRecord::Base
   end
 
   def scopes
-    if client_config["scopes"].nil? 
+    if Setting['plugin_redmine_openid_connect']["scopes"].nil?
       return "openid profile email user_name"
     else
-      client_config["scopes"].split(',').each(&:strip).join(' ')
+      Setting['plugin_redmine_openid_connect']["scopes"].split(',').each(&:strip).join(' ')
     end
   end
 
